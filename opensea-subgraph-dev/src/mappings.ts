@@ -30,10 +30,8 @@ import {
 // Ref: https://github.com/graphprotocol/graph-node/pull/4149
 export function handleAtomicMatch(callInfo: AtomicMatch_Call): void {
   let target = callInfo.inputs.addrs[11];
-  if (target.equals(WYVERN_ATOMICIZER_ADDRESS))
-    handleBundleOrder(callInfo);
-  else
-    handleSingleOrder(callInfo);
+  let handleOrder = target.equals(WYVERN_ATOMICIZER_ADDRESS) ? handleBundleOrder : handleSingleOrder;
+  handleOrder(callInfo);
 }
 
 function handleSingleOrder(callInfo: AtomicMatch_Call): void {
@@ -41,14 +39,13 @@ function handleSingleOrder(callInfo: AtomicMatch_Call): void {
 
   let target = callInfo.inputs.addrs[11];
   let transferResult = decodeSingleTransferResult(target, mergedCallData);
-  if (!transferResult)
-    return;
+  if (!transferResult) return;
 
-  let buyer = transferResult.to.toHexString();
-  let seller = transferResult.from.toHexString();
   let collectionAddr = transferResult.token.toHexString();
   let tokenId = transferResult.tokenId;
   let amount = transferResult.amount;
+  let buyer = transferResult.to.toHexString();
+  let seller = transferResult.from.toHexString();
   let saleKind = getSaleKind(callInfo.inputs.feeMethodsSidesKindsHowToCalls[6]);
   let paymentToken = callInfo.inputs.addrs[13];
   let priceETH = calculateTradePriceETH(callInfo, paymentToken);
@@ -59,17 +56,13 @@ function handleSingleOrder(callInfo: AtomicMatch_Call): void {
   let asset = getOrCreateAsset(assetID, tokenId, collectionAddr, buyer);
 
   // Same as Messari API.
-  let tradeID = callInfo.transaction.hash.toHexString()
-                    .concat("-")
-                    .concat(transferResult.functionSelector)
-                    .concat("-")
-                    .concat(tokenId.toString());
+  let tradeID = callInfo.transaction.hash.toHexString().concat("-").concat(transferResult.functionSelector).concat("-").concat(tokenId.toString());
   let trade = new Trade(tradeID);
-  trade.saleKind = saleKind;
+  trade.amount = amount;
   trade.buyer = buyer;
   trade.seller = seller;
+  trade.saleKind = saleKind;
   trade.asset = assetID;
-  trade.amount = amount;
   trade.priceETH = priceETH;
   trade.transactionHash = callInfo.transaction.hash.toHexString();
   trade.timestamp = callInfo.block.timestamp;
@@ -160,8 +153,7 @@ function updateCollectionRevenueMetrics(callInfo: AtomicMatch_Call, collectionAd
     let creatorRoyaltyFee = EXCHANGE_MARKETPLACE_FEE.le(takerRelayerFee) ? takerRelayerFee.minus(EXCHANGE_MARKETPLACE_FEE).divDecimal(BIGDECIMAL_HUNDRED) : BIGDECIMAL_ZERO;
 
     // Do not update if bundle sale
-    if (collection.royaltyFee.notEqual(creatorRoyaltyFee) && !isBundle)
-      collection.royaltyFee = creatorRoyaltyFee;
+    if (collection.royaltyFee.notEqual(creatorRoyaltyFee) && !isBundle) collection.royaltyFee = creatorRoyaltyFee;
 
     let totalRevenueETH = takerRelayerFee.toBigDecimal().times(priceETH).div(INVERSE_BASIS_POINT);
     let marketplaceRevenueETH = EXCHANGE_MARKETPLACE_FEE.le(takerRelayerFee) ? EXCHANGE_MARKETPLACE_FEE.toBigDecimal().times(priceETH).div(INVERSE_BASIS_POINT) : BIGDECIMAL_ZERO;

@@ -33,7 +33,7 @@ import {
   TRANSFER_FROM_SELECTOR,
 } from "./constants";
 
-export class DecodedTransferResult {
+export class DecodedCallDataResult {
   constructor(
       public readonly functionSelector: string,
       public readonly from: Address,
@@ -43,7 +43,7 @@ export class DecodedTransferResult {
       public readonly amount: BigInt) {}
 }
 
-export class DecodedAtomicizeResult {
+export class DecodedAtomicCallDataResult {
   constructor(
       public readonly targets: Address[],
       public readonly callDatas: Bytes[]) {}
@@ -218,16 +218,16 @@ export function guardedArrayReplace(
  */
 export function decodeERC721TransferMethod(
     target: Address,
-    callData: Bytes): DecodedTransferResult {
+    callData: Bytes): DecodedCallDataResult {
   const functionSelector = getFunctionSelector(callData);
-  const dataWithoutFunctionSelector = Bytes.fromUint8Array(callData.subarray(4));
+  const cleanData = Bytes.fromUint8Array(callData.subarray(4));
 
-  const decoded = ethereum.decode("(address,address,uint256)", dataWithoutFunctionSelector)!.toTuple();
+  const decoded = ethereum.decode("(address,address,uint256)", cleanData)!.toTuple();
   const senderAddress = decoded[0].toAddress();
   const recieverAddress = decoded[1].toAddress();
   const tokenId = decoded[2].toBigInt();
 
-  return new DecodedTransferResult(functionSelector, senderAddress, recieverAddress, target, tokenId, BIGINT_ONE);
+  return new DecodedCallDataResult(functionSelector, senderAddress, recieverAddress, target, tokenId, BIGINT_ONE);
 }
 
 /**
@@ -238,18 +238,18 @@ export function decodeERC721TransferMethod(
  */
 export function decodeERC1155TransferResult(
     target: Address,
-    callData: Bytes): DecodedTransferResult {
+    callData: Bytes): DecodedCallDataResult {
   const functionSelector = getFunctionSelector(callData);
-  const dataWithoutFunctionSelector = Bytes.fromUint8Array(callData.subarray(4));
-  const dataWithoutFunctionSelectorWithPrefix = ETHABI_DECODE_PREFIX.concat(dataWithoutFunctionSelector);
+  const cleanData = Bytes.fromUint8Array(callData.subarray(4));
+  const prefixedData = ETHABI_DECODE_PREFIX.concat(cleanData);
 
-  const decoded = ethereum.decode("(address,address,uint256,uint256,bytes)", dataWithoutFunctionSelectorWithPrefix)!.toTuple();
+  const decoded = ethereum.decode("(address,address,uint256,uint256,bytes)", prefixedData)!.toTuple();
   const senderAddress = decoded[0].toAddress();
   const recieverAddress = decoded[1].toAddress();
   const tokenId = decoded[2].toBigInt();
   const amount = decoded[3].toBigInt();
 
-  return new DecodedTransferResult(functionSelector, senderAddress, recieverAddress, target, tokenId, amount);
+  return new DecodedCallDataResult(functionSelector, senderAddress, recieverAddress, target, tokenId, amount);
 }
 
 /**
@@ -262,12 +262,12 @@ export function decodeERC1155TransferResult(
  * Ref: https://medium.com/@r2d2_68242/indexing-transaction-input-data-in-a-subgraph-6ff5c55abf20
  */
 export function decodeMatchERC721UsingCriteriaResult(
-    callData: Bytes): DecodedTransferResult {
+    callData: Bytes): DecodedCallDataResult {
   const functionSelector = getFunctionSelector(callData);
-  const dataWithoutFunctionSelector = Bytes.fromUint8Array(callData.subarray(4));
-  const dataWithoutFunctionSelectorWithPrefix = ETHABI_DECODE_PREFIX.concat(dataWithoutFunctionSelector);
+  const cleanData = Bytes.fromUint8Array(callData.subarray(4));
+  const prefixedData = ETHABI_DECODE_PREFIX.concat(cleanData);
 
-  const rawDecoded = ethereum.decode("(address,address,address,uint256,bytes32,bytes32[])", dataWithoutFunctionSelectorWithPrefix);
+  const rawDecoded = ethereum.decode("(address,address,address,uint256,bytes32,bytes32[])", prefixedData);
 
   const decoded = rawDecoded!.toTuple();
   const senderAddress = decoded[0].toAddress();
@@ -275,7 +275,7 @@ export function decodeMatchERC721UsingCriteriaResult(
   const nftContractAddress = decoded[2].toAddress();
   const tokenId = decoded[3].toBigInt();
 
-  return new DecodedTransferResult(functionSelector, senderAddress, recieverAddress, nftContractAddress, tokenId, BIGINT_ONE);
+  return new DecodedCallDataResult(functionSelector, senderAddress, recieverAddress, nftContractAddress, tokenId, BIGINT_ONE);
 }
 
 /**
@@ -283,19 +283,19 @@ export function decodeMatchERC721UsingCriteriaResult(
  * 0x96809f90 matchERC1155UsingCriteria(address,address,address,uint256,uint256,bytes32,bytes32[])
  * NOTE: needs ETHABI_DECODE_PREFIX to decode calldata contains arbitrary bytes/bytes array
  */
-export function decodeMatchERC1155UsingCriteriaResult(callData: Bytes): DecodedTransferResult {
+export function decodeMatchERC1155UsingCriteriaResult(callData: Bytes): DecodedCallDataResult {
   const functionSelector = getFunctionSelector(callData);
-  const dataWithoutFunctionSelector = Bytes.fromUint8Array(callData.subarray(4));
-  const dataWithoutFunctionSelectorWithPrefix = ETHABI_DECODE_PREFIX.concat(dataWithoutFunctionSelector);
+  const cleanData = Bytes.fromUint8Array(callData.subarray(4));
+  const prefixedData = ETHABI_DECODE_PREFIX.concat(cleanData);
 
-  const decoded = ethereum.decode("(address,address,address,uint256,uint256,bytes32,bytes32[])", dataWithoutFunctionSelectorWithPrefix)!.toTuple();
+  const decoded = ethereum.decode("(address,address,address,uint256,uint256,bytes32,bytes32[])", prefixedData)!.toTuple();
   const senderAddress = decoded[0].toAddress();
   const recieverAddress = decoded[1].toAddress();
   const nftContractAddress = decoded[2].toAddress();
   const tokenId = decoded[3].toBigInt();
   const amount = decoded[4].toBigInt();
 
-  return new DecodedTransferResult(functionSelector, senderAddress, recieverAddress, nftContractAddress, tokenId, amount);
+  return new DecodedCallDataResult(functionSelector, senderAddress, recieverAddress, nftContractAddress, tokenId, amount);
 }
 
 /**
@@ -303,10 +303,10 @@ export function decodeMatchERC1155UsingCriteriaResult(callData: Bytes): DecodedT
  * 0x68f0bcaa atomicize(address[],uint256[],uint256[],bytes)
  * https://www.4byte.directory/signatures/?bytes4_signature=0x68f0bcaa
  */
-export function decodeAtomicizeCall(callData: Bytes): DecodedAtomicizeResult {
-  const dataWithoutFunctionSelector = Bytes.fromUint8Array(callData.subarray(4));
-  const dataWithoutFunctionSelectorWithPrefix = ETHABI_DECODE_PREFIX.concat(dataWithoutFunctionSelector);
-  const decoded = ethereum.decode("(address[],uint256[],uint256[],bytes)", dataWithoutFunctionSelectorWithPrefix)!.toTuple();
+export function decodeAtomicizeCall(callData: Bytes): DecodedAtomicCallDataResult {
+  const cleanData = Bytes.fromUint8Array(callData.subarray(4));
+  const prefixedData = ETHABI_DECODE_PREFIX.concat(cleanData);
+  const decoded = ethereum.decode("(address[],uint256[],uint256[],bytes)", prefixedData)!.toTuple();
   // target for each item
   const targets = decoded[0].toAddressArray();
   // length of calldata for each item
@@ -315,22 +315,26 @@ export function decodeAtomicizeCall(callData: Bytes): DecodedAtomicizeResult {
   const callDatas = decoded[3].toBytes();
   const atomicizedCallDatas = atomicizeCallData(callDatas, callDataLengths);
 
-  return new DecodedAtomicizeResult(targets, atomicizedCallDatas);
+  return new DecodedAtomicCallDataResult(targets, atomicizedCallDatas);
 }
 
 /**
  * Determine which decoding logic we should use depending on the functionSelector.
  */
-export function decodeNftTransferResult(target: Address, callData: Bytes): DecodedTransferResult {
+export function decodeNftTransferResult(target: Address, callData: Bytes): DecodedCallDataResult {
   const functionSelector = getFunctionSelector(callData);
-  if (functionSelector == TRANSFER_FROM_SELECTOR || functionSelector == ERC721_SAFE_TRANSFER_FROM_SELECTOR)
+  switch (functionSelector) {
+  case TRANSFER_FROM_SELECTOR:
+  case ERC721_SAFE_TRANSFER_FROM_SELECTOR:
     return decodeERC721TransferMethod(target, callData);
-  else if (functionSelector == MATCH_ERC721_TRANSFER_FROM_SELECTOR || functionSelector == MATCH_ERC721_SAFE_TRANSFER_FROM_SELECTOR)
+  case MATCH_ERC721_TRANSFER_FROM_SELECTOR:
+  case MATCH_ERC721_SAFE_TRANSFER_FROM_SELECTOR:
     return decodeMatchERC721UsingCriteriaResult(callData);
-  else if (functionSelector == ERC1155_SAFE_TRANSFER_FROM_SELECTOR)
+  case ERC1155_SAFE_TRANSFER_FROM_SELECTOR:
     return decodeERC1155TransferResult(target, callData);
-  else
+  default:
     return decodeMatchERC1155UsingCriteriaResult(callData);
+  }
 }
 
 export function getOrCreateUser(addr: string): User {
@@ -376,16 +380,12 @@ export function getOrCreateCollection(collectionID: string): Collection {
     collection = new Collection(collectionID);
     collection.nftStandard = getNftStandard(collectionID);
     const contract = NftMetadata.bind(Address.fromString(collectionID));
-
-    const nameResult = contract.try_name();
-    if (!nameResult.reverted)
-      collection.name = nameResult.value;
-    const symbolResult = contract.try_symbol();
-    if (!symbolResult.reverted)
-      collection.symbol = symbolResult.value;
-    const totalSupplyResult = contract.try_totalSupply();
-    if (!totalSupplyResult.reverted)
-      collection.totalSupply = totalSupplyResult.value;
+    if (!contract.try_name().reverted)
+      collection.name = contract.try_name().value;
+    if (!contract.try_symbol().reverted)
+      collection.symbol = contract.try_symbol().value;
+    if (!contract.try_totalSupply().reverted)
+      collection.totalSupply = contract.try_totalSupply().value;
 
     collection.royaltyFee = BIGDECIMAL_ZERO;
     collection.cumulativeTradeVolumeETH = BIGDECIMAL_ZERO;
@@ -405,14 +405,12 @@ export function getOrCreateCollection(collectionID: string): Collection {
  */
 function getNftStandard(collectionID: string): string {
   const erc165 = ERC165.bind(Address.fromString(collectionID));
-
   const isERC721Result = erc165.try_supportsInterface(Bytes.fromHexString(ERC721_INTERFACE_IDENTIFIER));
   if (!isERC721Result.reverted && isERC721Result.value)
     return NftStandard.ERC721;
   const isERC1155Result = erc165.try_supportsInterface(Bytes.fromHexString(ERC1155_INTERFACE_IDENTIFIER));
   if (!isERC1155Result.reverted && isERC1155Result.value)
     return NftStandard.ERC1155;
-
   return NftStandard.UNKNOWN;
 }
 
@@ -428,15 +426,15 @@ export function calculateTradePriceETH(call: AtomicMatch_Call, paymentToken: Add
 /**
  * Decode a single NFT transfer from calldata. If the call's functionSelector is not recognized, return null (ignored).
  */
-export function decodeSingleTransferResult(target: Address, callData: Bytes): DecodedTransferResult|null {
+export function decodeSingleTransferResult(target: Address, callData: Bytes): DecodedCallDataResult|null {
   return validateCallDataFunctionSelector(callData) ? decodeNftTransferResult(target, callData) : null;
 }
 
 /**
  * Decode a bundled NFT tranfer from calldata. Ignore any transfer if the functionSelector is not recognized.
  */
-export function decodeBundleNftTransferResults(callDatas: Bytes): DecodedTransferResult[] {
-  const decodedTransferResults: DecodedTransferResult[] = [];
+export function decodeBundleNftTransferResults(callDatas: Bytes): DecodedCallDataResult[] {
+  const decodedTransferResults: DecodedCallDataResult[] = [];
   const decodedAtomicizeResult = decodeAtomicizeCall(callDatas);
   for (let i = 0; i < decodedAtomicizeResult.targets.length; i++) {
     const target = decodedAtomicizeResult.targets[i];
